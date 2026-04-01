@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Logs
+logs/
+*.log
+
+# Database
+*.db
+*.db-shm
+*.db-wal
+
+# Hash cache
+.rag_collection.hash
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+.env.local
