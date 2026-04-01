@@ -19,42 +19,49 @@
 
 ## 快速开始
 
-### 1. 安装依赖
+### 1. 克隆项目
+
+```bash
+git clone https://github.com/Hzzhang-nlp/rag-project.git
+cd rag-project
+```
+
+### 2. 安装依赖
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### 2. 配置
+### 3. 配置 API Key
 
-编辑 `config.yml`，填入 SiliconFlow API Key：
+注册 [SiliconFlow](https://www.siliconflow.cn) 并获取 API Key，编辑 `config.yml`：
 
 ```yaml
-siliconflow_api_key: "your-api-key"
+siliconflow_api_key: "your-siliconflow-api-key"
 ```
 
-### 3. 运行
+### 4. 运行
 
 ```bash
 python main.py
 ```
 
-### 4. 添加文档
+### 5. 添加文档
 
 将文档放入 `database/data/uploads/` 目录，支持 `.txt` 和 `.md` 格式。
 
 ## 项目结构
 
 ```
-RAG/
+rag-project/
 ├── main.py                    # 主程序
-├── config.yml                # 配置文件
-├── requirements.txt           # 依赖
+├── config.yml                # 配置文件（需填入 API Key）
+├── requirements.txt          # 依赖
 ├── embedding/                # 向量化模块
-├── rerank/                   # 重排序模块
-├── model/                    # LLM 模块
-├── utils/                    # 工具模块
-└── database/                 # 数据库和文档
+├── rerank/                  # 重排序模块
+├── model/                   # LLM 模块
+├── utils/                  # 工具模块
+└── database/               # 数据库和文档
 ```
 
 ## 使用说明

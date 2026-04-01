@@ -1,9 +1,9 @@
 # SiliconFlow API (国产，推荐)
-siliconflow_api_key: "sk-cndevbvvosklaykbvlqqrsmclzummxpxximpzpcsxduxtazu"
+siliconflow_api_key: "your-siliconflow-api-key"
 siliconflow_base_url: "https://api.siliconflow.cn/v1"
 
-# Embedding 模型 (选一个)
-embedding_model: "Qwen/Qwen3-Embedding-0.6B"  # 最轻量，免费推荐
+# Embedding 模型
+embedding_model: "Qwen/Qwen3-Embedding-0.6B"
 
 # LLM 模型
 llm_model: "Qwen/Qwen3-8B"
