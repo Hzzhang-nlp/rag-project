@@ -3,3 +3,6 @@ langchain-text-splitters
 pymilvus
 requests
 pyyaml
+pdfplumber
+openpyxl
+pandas

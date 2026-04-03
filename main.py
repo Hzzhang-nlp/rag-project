@@ -13,22 +13,75 @@ from rerank.siliconflow_reranker import SiliconFlowReranker
 from model.siliconflow_llm import siliconflow_chat
 from utils.splitter import split_docs_to_chunks
 from utils.logger import setup_logger
+import pdfplumber
+import pandas as pd
 
 logger = setup_logger("rag")
 
 
+def _load_pdf_file(filepath: str, filename: str) -> Document:
+    """加载 PDF 文件"""
+    text_parts = []
+    try:
+        with pdfplumber.open(filepath) as pdf:
+            for page in pdf.pages:
+                page_text = page.extract_text()
+                if page_text:
+                    text_parts.append(page_text)
+        content = "\n".join(text_parts)
+        logger.info(f"加载 PDF: {filename}, 长度: {len(content)} 字符")
+        return Document(page_content=content, metadata={"reference": filename})
+    except Exception as e:
+        logger.error(f"加载 PDF 失败 {filename}: {e}")
+        return None
+
+
+def _load_excel_file(filepath: str, filename: str) -> Document:
+    """加载 Excel 文件"""
+    try:
+        df = pd.read_excel(filepath, engine="openpyxl")
+        content = f"文件名: {filename}\n"
+        content += f"工作表: {df.shape[0]} 行 x {df.shape[1]} 列\n\n"
+        content += df.to_string(index=False)
+        logger.info(f"加载 Excel: {filename}, 长度: {len(content)} 字符")
+        return Document(page_content=content, metadata={"reference": filename})
+    except Exception as e:
+        logger.error(f"加载 Excel 失败 {filename}: {e}")
+        return None
+
+
+def _load_text_file(filepath: str, filename: str) -> Document:
+    """加载文本文件 (txt/md)"""
+    try:
+        with open(filepath, "r", encoding="utf-8") as f:
+            content = f.read()
+        logger.info(f"加载文档: {filename}, 长度: {len(content)} 字符")
+        return Document(page_content=content, metadata={"reference": filename})
+    except Exception as e:
+        logger.error(f"加载文本失败 {filename}: {e}")
+        return None
+
+
 def load_multiple_format_files(folder_path: str) -> list[Document]:
-    """加载指定目录下的文档文件，支持 txt/md 格式"""
+    """加载指定目录下的文档文件，支持 txt/md/pdf/xlsx 格式"""
     docs = []
-    for filename in os.listdir(folder_path):
-        filepath = os.path.join(folder_path, filename)
-        if filename.endswith((".txt", ".md", ".markdown")):
-            with open(filepath, "r", encoding="utf-8") as f:
-                content = f.read()
-                docs.append(
-                    Document(page_content=content, metadata={"reference": filename})
-                )
-                logger.info(f"加载文档: {filename}, 长度: {len(content)} 字符")
+    for root, dirs, files in os.walk(folder_path):
+        for filename in files:
+            filepath = os.path.join(root, filename)
+            rel_path = os.path.relpath(filepath, folder_path)
+
+            if filename.endswith((".txt", ".md", ".markdown")):
+                doc = _load_text_file(filepath, rel_path)
+            elif filename.endswith(".pdf"):
+                doc = _load_pdf_file(filepath, rel_path)
+            elif filename.endswith(".xlsx"):
+                doc = _load_excel_file(filepath, rel_path)
+            else:
+                continue
+
+            if doc:
+                docs.append(doc)
+
     logger.info(f"共加载 {len(docs)} 个文档")
     return docs
 
@@ -41,10 +94,15 @@ def get_files_hash(
     m.update(str(chunk_size).encode())
     m.update(str(chunk_overlap).encode())
     m.update(embedding_model.encode())
-    for filename in sorted(os.listdir(folder_path)):
-        if filename.endswith((".txt", ".md", ".markdown")):
-            with open(os.path.join(folder_path, filename), "rb") as f:
-                m.update(f.read())
+    for root, dirs, files in os.walk(folder_path):
+        for filename in sorted(files):
+            if filename.endswith((".txt", ".md", ".markdown", ".pdf", ".xlsx")):
+                filepath = os.path.join(root, filename)
+                try:
+                    with open(filepath, "rb") as f:
+                        m.update(f.read())
+                except Exception:
+                    pass
     return m.hexdigest()
 
 
@@ -150,7 +208,12 @@ def query_loop(milvus_client: MilvusClient, collection_name: str, config: str):
             messages = [
                 {
                     "role": "system",
-                    "content": "你是一个有帮助的AI助手。请结合检索到的内容回答用户问题，直接输出详细合适的最终答案。",
+                    "content": """你是一个有帮助的AI助手。请结合检索到的内容回答用户问题。
+要求：
+1. 回答要简洁精炼，抓住要点
+2. 适当分段，使用列表或编号使内容清晰
+3. 不要大段引用原文，要用自己的话总结
+4. 最后必须列出参考文档来源，格式为：[来源] 文件名""",
                 },
                 {
                     "role": "user",
@@ -163,9 +226,23 @@ def query_loop(milvus_client: MilvusClient, collection_name: str, config: str):
             answer = siliconflow_chat(messages, config_path=config)
             logger.info("LLM 答案生成成功")
 
+            # 7. 整理参考文档列表
+            references_used = []
+            if "results" in rerank_result:
+                for item in rerank_result["results"][:5]:
+                    ref_idx = item.get("index", 0)
+                    if ref_idx < len(retrieved_metadatas):
+                        ref = retrieved_metadatas[ref_idx].get("reference", "")
+                        if ref and ref not in references_used:
+                            references_used.append(ref)
+
             print("=" * 50)
             print("答案：")
             print(answer)
+            print("-" * 50)
+            print("参考文档：")
+            for i, ref in enumerate(references_used, 1):
+                print(f"  {i}. {ref}")
             print("=" * 50 + "\n")
 
         except KeyboardInterrupt:
@@ -229,7 +306,7 @@ def main():
 
         documents = load_multiple_format_files(folder_path)
         if not documents:
-            print(f"未找到文档，请确保 {folder_path} 目录下有 .txt 或 .md 文件")
+            print(f"未找到文档，请确保 {folder_path} 目录下有 .txt/.md/.pdf/.xlsx 文件")
             logger.error("未找到文档文件")
             return
 
